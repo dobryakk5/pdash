@@ -29,6 +29,12 @@ def handle_login():
     logger.info("\n" + "="*50)
     logger.info("Начало обработки /login запроса")
     
+    # Проверяем User-Agent на принадлежность к Telegram Bot
+    user_agent = request.headers.get('User-Agent', '').lower()
+    if 'telegrambot' in user_agent or 'bot.html' in user_agent:
+        logger.warning(f"Запрос от Telegram Bot User-Agent: {user_agent}")
+        return "Telegram link preview", 200
+    
     token = request.args.get('token')
     logger.info(f"Получен токен из URL: {token}")
     
