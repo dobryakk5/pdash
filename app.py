@@ -3,7 +3,14 @@ import redis
 from flask import Flask, session, redirect, request, send_from_directory
 import os
 import logging
+import argparse
+import sys
 import dash
+
+# Настройка аргументов командной строки
+parser = argparse.ArgumentParser()
+parser.add_argument('--admin', action='store_true', help='Enable admin mode without authentication')
+args = parser.parse_args()
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,63 +24,33 @@ logger.info("Подключение к Redis установлено")
 server = Flask(__name__)
 BOT_TOKEN = os.getenv("API_TOKEN")
 server.secret_key = BOT_TOKEN or "DEFAULT_SECRET"
-app = Dash(__name__, server=server, suppress_callback_exceptions=True)
+
+# Конфигурация Dash
+app = Dash(
+    __name__,
+    use_pages=True,
+    server=server,
+    suppress_callback_exceptions=True,
+    external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'],
+    meta_tags=[{
+        'name': 'viewport',
+        'content': 'width=device-width, initial-scale=1.0, maximum-scale=1.0'
+    }]
+)
 
 logger.info(f"Секретный ключ приложения: {server.secret_key[:5]}...")
+logger.info(f"Режим администратора: {'ВКЛЮЧЕН' if args.admin else 'выключен'}")
 
-# Маршрут для favicon
-@server.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(server.root_path, 'static'),
-                              'favicon.ico', mimetype='image/vnd.microsoft.icon')
-
-# Маршрут для обработки токена
-@server.route('/auth')
-def handle_auth():
-    logger.info("\n" + "="*50)
-    logger.info("Начало обработки /auth запроса")
-    
-    # Проверяем User-Agent на принадлежность к Telegram
-    user_agent = request.headers.get('User-Agent', '').lower()
-    if 'telegrambot' in user_agent or 'bot.html' in user_agent:
-        logger.warning(f"Запрос от Telegram Bot (User-Agent: {user_agent})")
-        return "Telegram link preview", 200
-    
-    token = request.args.get('token')
-    logger.info(f"Получен токен из URL: {token}")
-    
-    if not token:
-        logger.warning("Токен не предоставлен")
-        return "Токен не предоставлен", 400
-    
-    # Формируем ключ Redis
-    redis_key = f"dash_token:{token}"
-    logger.info(f"Ключ для поиска в Redis: '{redis_key}'")
-    
-    # Проверяем токен в Redis
-    user_id = r.get(redis_key)
-    logger.info(f"Результат поиска в Redis: '{user_id}'")
-    
-    if user_id:
-        logger.info(f"Найден user_id: {user_id}")
-        
-        # Удаляем использованный токен
-        r.delete(redis_key)
-        logger.info(f"Токен удален из Redis")
-        
-        # Сохраняем user_id в сессии
-        session['user_id'] = user_id
-        logger.info(f"User_id сохранен в сессии: {session['user_id']}")
-        
-        # Перенаправляем на основной интерфейс
-        return redirect('/app')
-    
-    logger.error("ОШИБКА: Токен не найден в Redis или истек срок действия")
-    return "Неверная или просроченная ссылка для входа", 401
 
 # Защищенный маршрут для основного приложения
 @server.route('/app')
 def dash_app():
+    # Если включен режим администратора и нет активной сессии
+    if args.admin and 'user_id' not in session:
+        # Устанавливаем user_id администратора
+        session['user_id'] = "7852511755"
+        logger.info(f"Автоматическая авторизация администратора: user_id=7852511755")
+    
     logger.info("\n" + "="*50)
     logger.info(f"Запрос к /app, сессия: user_id={session.get('user_id', 'отсутствует')}")
     return app.index()
@@ -92,6 +69,11 @@ def render_page(pathname):
     logger.info("\n" + "="*50)
     logger.info(f"Обработка пути: {pathname}")
     
+    # Для режима администратора: устанавливаем user_id при первом обращении
+    if args.admin and 'user_id' not in session:
+        session['user_id'] = "7852511755"
+        logger.info(f"Автоматическая авторизация администратора: user_id=7852511755")
+    
     # Проверяем авторизацию
     user_id = session.get('user_id')
     logger.info(f"Текущий user_id в сессии: {user_id}")
@@ -102,21 +84,38 @@ def render_page(pathname):
             html.P("Используйте команду /start в Telegram-боте для получения ссылки")
         ])
     
+    # Определяем, является ли пользователь администратором
+    is_admin = user_id == "7852511755"
+
+    # Если пользователь впервые заходит по корневому пути, перенаправляем на /app
+    if pathname == '/' and is_admin:
+        return dcc.Location(pathname="/app", id="redirect-admin")
+    
+    app.layout = html.Div([
+        html.Div([
+        dcc.Link(f"{page['name']}", href=page["path"])
+        for page in dash.page_registry.values()
+        ]),
+        dash.page_container  # здесь будет отображаться содержимое выбранной страницы
+    ])
+
     return html.Div([
-        html.H1(f"Добро пожаловать, пользователь #{user_id}!"),
         html.P("Вы успешно авторизованы"),
         dcc.Graph(
             figure={
                 'data': [{'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar'}],
                 'layout': {'title': 'Ваши данные'}
             }
-        )
+        ),
+        html.Div([
+            html.H2("Специальные возможности администратора"),
+            html.P("Доступ к расширенным настройкам"),
+            html.P("Просмотр всех пользователей"),
+            html.P("Системные отчеты"),
+        ]) if is_admin else None
     ])
 
 if __name__ == '__main__':
-    # Создаем папку static если её нет
-    static_dir = os.path.join(server.root_path, 'static')
-    if not os.path.exists(static_dir):
-        os.makedirs(static_dir)
     
-    app.run(debug=True)
+    # Запускаем приложение без режима отладки
+    app.run(debug=False, port=8050)
