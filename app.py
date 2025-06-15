@@ -1,6 +1,6 @@
 from dash import Dash, dcc, html, Input, Output, callback
 import redis
-from flask import Flask, session, redirect, request, url_for
+from flask import Flask, session, redirect, request, url_for, send_from_directory
 import os
 from dotenv import load_dotenv
 import logging
@@ -23,23 +23,30 @@ app = Dash(__name__, server=server)
 
 logger.info(f"Секретный ключ приложения: {server.secret_key[:5]}...")
 
+# Маршрут для favicon
+@server.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(server.root_path, 'static'),
+                              'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 # Маршрут для обработки токена
 @server.route('/auth')
 def handle_auth():
     logger.info("\n" + "="*50)
     logger.info("Начало обработки /auth запроса")
     
+    # Игнорируем запросы к ресурсам
+    if request.path != '/auth' or not request.args.get('token'):
+        logger.warning("Запрос к ресурсу, игнорируем токен")
+        return redirect('/app')
+    
     token = request.args.get('token')
     logger.info(f"Получен токен из URL: {token}")
-    
-    if not token:
-        logger.error("ОШИБКА: Токен отсутствует в запросе")
-        return "Токен не предоставлен", 400
     
     # Проверяем наличие активной сессии
     if 'user_id' in session:
         logger.warning(f"Пользователь уже авторизован (user_id={session['user_id']})")
-        return redirect(url_for('dash_app'))
+        return redirect('/app')
     
     # Формируем ключ Redis
     redis_key = f"dash_token:{token}"
@@ -61,7 +68,7 @@ def handle_auth():
         logger.info(f"User_id сохранен в сессии: {session['user_id']}")
         
         # Перенаправляем с очисткой параметров
-        return redirect(url_for('dash_app'))
+        return redirect('/app')
     
     logger.error("ОШИБКА: Токен не найден в Redis или истек срок действия")
     return "Неверный или просроченный токен авторизации", 401
@@ -87,25 +94,19 @@ def render_page(pathname):
     logger.info("\n" + "="*50)
     logger.info(f"Обработка пути: {pathname}")
     
-    # Если запрос к /auth - обрабатываем отдельно
-    if pathname == '/auth':
-        token = request.args.get('token', '')
-        logger.warning(f"Прямой доступ к /auth с токеном: {token}")
-        return html.Div([
-            html.H1("Неправильный метод доступа"),
-            html.P("Используйте ссылку из Telegram-бота для авторизации")
-        ])
+    # Разрешаем доступ только по пути /app
+    if pathname != '/app':
+        logger.warning(f"Перенаправление с {pathname} на /app")
+        return redirect('/app')
     
-    # Проверяем авторизацию только для /app
     user_id = session.get('user_id')
     logger.info(f"Текущий user_id в сессии: {user_id}")
     
-    if pathname != '/app' or not user_id:
-        logger.warning(f"Перенаправление неавторизованного пользователя")
+    if not user_id:
+        logger.warning("Пользователь не авторизован")
         return html.Div([
             html.H1("Требуется авторизация"),
-            html.P("Используйте команду /start в Telegram-боте для получения ссылки"),
-            html.P(f"Текущий путь: {pathname}")
+            html.P("Используйте команду /start в Telegram-боте для получения ссылки")
         ])
     
     logger.info(f"Пользователь #{user_id} авторизован")
@@ -118,21 +119,28 @@ def render_page(pathname):
                 'layout': {'title': 'Ваши данные'}
             }
         ),
-        html.Div(id='hidden-div', style={'display': 'none'})
+        # Компонент для очистки URL
+        dcc.Location(id='redirect', refresh=True)
     ])
 
 # Callback для очистки URL после загрузки
 @callback(
-    Output('hidden-div', 'children'),
+    Output('redirect', 'pathname'),
     Input('url', 'href')
 )
 def clear_url(href):
     if 'token=' in href:
         logger.warning(f"Обнаружен токен в URL: {href}")
-        return dcc.Location(pathname='/app', id='clear-url')
+        return '/app'
     return None
 
 if __name__ == '__main__':
     logger.info("\n" + "="*50)
     logger.info("Запуск сервера...")
+    
+    # Создаем папку static если её нет
+    static_dir = os.path.join(server.root_path, 'static')
+    if not os.path.exists(static_dir):
+        os.makedirs(static_dir)
+    
     app.run(debug=True)
