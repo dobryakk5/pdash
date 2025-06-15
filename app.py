@@ -41,6 +41,52 @@ app = Dash(
 logger.info(f"Секретный ключ приложения: {server.secret_key[:5]}...")
 logger.info(f"Режим администратора: {'ВКЛЮЧЕН' if args.admin else 'выключен'}")
 
+# Маршрут для favicon
+@server.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(server.root_path, 'static'),
+                              'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+# Маршрут для обработки токена
+@server.route('/auth')
+def handle_auth():
+    # Проверяем User-Agent на принадлежность к Telegram
+    user_agent = request.headers.get('User-Agent', '').lower()
+    if 'telegrambot' in user_agent or 'bot.html' in user_agent:
+        logger.warning(f"Запрос от Telegram Bot (User-Agent: {user_agent})")
+        return "Telegram link preview", 200
+    
+    token = request.args.get('token')
+    logger.info(f"Получен токен из URL: {token}")
+    
+    if not token:
+        logger.warning("Токен не предоставлен")
+        return "Токен не предоставлен", 400
+    
+    # Формируем ключ Redis
+    redis_key = f"dash_token:{token}"
+    logger.info(f"Ключ для поиска в Redis: '{redis_key}'")
+    
+    # Проверяем токен в Redis
+    user_id = r.get(redis_key)
+    logger.info(f"Результат поиска в Redis: '{user_id}'")
+    
+    if user_id:
+        logger.info(f"Найден user_id: {user_id}")
+        
+        # Удаляем использованный токен
+        r.delete(redis_key)
+        logger.info(f"Токен удален из Redis")
+        
+        # Сохраняем user_id в сессии
+        session['user_id'] = user_id
+        logger.info(f"User_id сохранен в сессии: {session['user_id']}")
+        
+        # Перенаправляем на основной интерфейс
+        return redirect('/app')
+    
+    logger.error("ОШИБКА: Токен не найден в Redis или истек срок действия")
+    return "Неверная или просроченная ссылка для входа", 401
 
 # Защищенный маршрут для основного приложения
 @server.route('/app')
@@ -119,3 +165,4 @@ if __name__ == '__main__':
     
     # Запускаем приложение без режима отладки
     app.run(debug=False, port=8050)
+
