@@ -1,6 +1,6 @@
 from dash import Dash, dcc, html, Input, Output, callback
 import redis
-from flask import Flask, session, request, send_from_directory, redirect  # Добавлен redirect
+from flask import Flask, session, request, send_from_directory
 import os, dash
 import logging
 import argparse
@@ -43,27 +43,6 @@ app = Dash(
 
 logger.info(f"Режим администратора: {'ВКЛЮЧЕН' if args.admin else 'выключен'}")
 
-# Маршрут для корня
-@server.route('/')
-def root():
-    logger.info("Обработка корневого маршрута '/'")
-    user_id = auth_manager.get_current_user()
-    
-    if user_id:
-        logger.info(f"Перенаправление авторизованного пользователя {user_id} на /app/purchases")
-        return redirect('/app/purchases')
-    else:
-        logger.warning("Пользователь не авторизован, показ страницы авторизации")
-        return """
-        <html>
-            <head><title>Требуется авторизация</title></head>
-            <body>
-                <h1>Требуется авторизация</h1>
-                <p>Используйте команду /start в Telegram-боте для получения ссылки</p>
-            </body>
-        </html>
-        """
-
 # Маршрут для обработки токена
 @server.route('/auth')
 def handle_auth():
@@ -83,6 +62,15 @@ app.layout = html.Div([
     html.Div(id='content')
 ])
 
+def generate_navbar():
+    """Генерирует навигационную панель с правильными путями"""
+    links = []
+    for page in dash.page_registry.values():
+        # Добавляем префикс /app/ к путям страниц
+        full_path = f"/app{page['path']}"
+        links.append(dcc.Link(f"{page['name']} | ", href=full_path))
+    return html.Div(links, style={'padding': '10px', 'backgroundColor': '#f0f0f0'})
+
 @callback(
     Output('content', 'children'),
     Input('url', 'pathname')
@@ -99,22 +87,18 @@ def render_page(pathname):
             html.P("Требуется авторизация. Используйте команду /start в Telegram-боте для получения ссылки")
         ])
     
-    # Перенаправление на страницу покупок
+    # Для всех пользователей перенаправляем на страницу покупок
     if pathname == '/app/' or pathname == '/app':
-        logger.info("Перенаправление на страницу покупок")
         return dcc.Location(pathname="/app/purchases", id="redirect-to-purchases")
-    
-    # Генерация навигационной панели
-    navbar = html.Div([
-        dcc.Link(f"{page['name']} | ", href=f"/app{page['path']}")
-        for page in dash.page_registry.values()
-    ], style={'padding': '10px', 'backgroundColor': '#f0f0f0'})
     
     # Отображаем страницы приложения
     return html.Div([
-        navbar,
+        # Навигационная панель с исправленными путями
+        generate_navbar(),
+        
+        # Контейнер для контента страницы
         dash.page_container
     ])
 
 if __name__ == '__main__':
-    server.run(debug=False, port=8050)
+    app.run(debug=False, port=8050)

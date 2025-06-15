@@ -22,12 +22,23 @@ async def get_pool():
         _db_pool = await asyncpg.create_pool(dsn)
     return _db_pool
 
-dash.register_page(__name__)
+dash.register_page(
+    __name__,
+    path='/purchases',  
+    name='Покупки',
+    title='История покупок'
+)
 
 def layout():
-    user_id = session.get('user_id')
-    if not user_id:
+    user_id_str = session.get('user_id')
+    if not user_id_str:
         return html.Div("Пожалуйста, войдите в систему, чтобы просмотреть аналитику.")
+    
+    try:
+        # Преобразуем user_id в целое число
+        user_id = int(user_id_str)
+    except ValueError:
+        return html.Div("Некорректный идентификатор пользователя.")
     
     # Создаем асинхронную функцию для получения данных
     async def fetch_data():
@@ -37,7 +48,7 @@ def layout():
                 "SELECT id, category, subcategory, price, ts "
                 "FROM purchases "
                 "WHERE user_id = $1",
-                user_id
+                user_id  # Теперь передаем целое число
             )
             return [dict(row) for row in rows]
 
