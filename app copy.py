@@ -41,6 +41,11 @@ app = Dash(
 logger.info(f"Секретный ключ приложения: {server.secret_key[:5]}...")
 logger.info(f"Режим администратора: {'ВКЛЮЧЕН' if args.admin else 'выключен'}")
 
+# Маршрут для favicon
+@server.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(server.root_path, 'static'),
+                              'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 # Маршрут для обработки токена
 @server.route('/auth')
@@ -160,3 +165,4 @@ if __name__ == '__main__':
     
     # Запускаем приложение без режима отладки
     app.run(debug=False, port=8050)
+

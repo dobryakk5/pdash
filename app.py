@@ -1,11 +1,10 @@
 from dash import Dash, dcc, html, Input, Output, callback
 import redis
-from flask import Flask, session, redirect, request, send_from_directory
-import os
+from flask import Flask, session, request, send_from_directory
+import os, dash
 import logging
 import argparse
-import sys
-import dash
+from auth import AuthManager
 
 # Настройка аргументов командной строки
 parser = argparse.ArgumentParser()
@@ -25,6 +24,9 @@ server = Flask(__name__)
 BOT_TOKEN = os.getenv("API_TOKEN")
 server.secret_key = BOT_TOKEN or "DEFAULT_SECRET"
 
+# Инициализация менеджера авторизации
+auth_manager = AuthManager(r, admin_mode=args.admin)
+
 # Конфигурация Dash
 app = Dash(
     __name__,
@@ -38,65 +40,22 @@ app = Dash(
     }]
 )
 
-logger.info(f"Секретный ключ приложения: {server.secret_key[:5]}...")
 logger.info(f"Режим администратора: {'ВКЛЮЧЕН' if args.admin else 'выключен'}")
 
 # Маршрут для favicon
-@server.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(server.root_path, 'static'),
-                              'favicon.ico', mimetype='image/vnd.microsoft.icon')
+#@server.route('/favicon.ico')
+#def favicon():
+#    return send_from_directory(os.path.join(server.root_path, 'static'),
+ #                             'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 # Маршрут для обработки токена
 @server.route('/auth')
 def handle_auth():
-    # Проверяем User-Agent на принадлежность к Telegram
-    user_agent = request.headers.get('User-Agent', '').lower()
-    if 'telegrambot' in user_agent or 'bot.html' in user_agent:
-        logger.warning(f"Запрос от Telegram Bot (User-Agent: {user_agent})")
-        return "Telegram link preview", 200
-    
-    token = request.args.get('token')
-    logger.info(f"Получен токен из URL: {token}")
-    
-    if not token:
-        logger.warning("Токен не предоставлен")
-        return "Токен не предоставлен", 400
-    
-    # Формируем ключ Redis
-    redis_key = f"dash_token:{token}"
-    logger.info(f"Ключ для поиска в Redis: '{redis_key}'")
-    
-    # Проверяем токен в Redis
-    user_id = r.get(redis_key)
-    logger.info(f"Результат поиска в Redis: '{user_id}'")
-    
-    if user_id:
-        logger.info(f"Найден user_id: {user_id}")
-        
-        # Удаляем использованный токен
-        r.delete(redis_key)
-        logger.info(f"Токен удален из Redis")
-        
-        # Сохраняем user_id в сессии
-        session['user_id'] = user_id
-        logger.info(f"User_id сохранен в сессии: {session['user_id']}")
-        
-        # Перенаправляем на основной интерфейс
-        return redirect('/app')
-    
-    logger.error("ОШИБКА: Токен не найден в Redis или истек срок действия")
-    return "Неверная или просроченная ссылка для входа", 401
+    return auth_manager.handle_authentication()
 
 # Защищенный маршрут для основного приложения
 @server.route('/app')
 def dash_app():
-    # Если включен режим администратора и нет активной сессии
-    if args.admin and 'user_id' not in session:
-        # Устанавливаем user_id администратора
-        session['user_id'] = "7852511755"
-        logger.info(f"Автоматическая авторизация администратора: user_id=7852511755")
-    
     logger.info("\n" + "="*50)
     logger.info(f"Запрос к /app, сессия: user_id={session.get('user_id', 'отсутствует')}")
     return app.index()
@@ -115,14 +74,8 @@ def render_page(pathname):
     logger.info("\n" + "="*50)
     logger.info(f"Обработка пути: {pathname}")
     
-    # Для режима администратора: устанавливаем user_id при первом обращении
-    if args.admin and 'user_id' not in session:
-        session['user_id'] = "7852511755"
-        logger.info(f"Автоматическая авторизация администратора: user_id=7852511755")
-    
-    # Проверяем авторизацию
-    user_id = session.get('user_id')
-    logger.info(f"Текущий user_id в сессии: {user_id}")
+    user_id = auth_manager.get_current_user()
+    logger.info(f"Текущий user_id: {user_id}")
     
     if not user_id:
         return html.Div([
@@ -130,8 +83,7 @@ def render_page(pathname):
             html.P("Используйте команду /start в Telegram-боте для получения ссылки")
         ])
     
-    # Определяем, является ли пользователь администратором
-    is_admin = user_id == "7852511755"
+    is_admin = auth_manager.is_admin()
 
     # Если пользователь впервые заходит по корневому пути, перенаправляем на /app
     if pathname == '/' and is_admin:
@@ -142,7 +94,7 @@ def render_page(pathname):
         dcc.Link(f"{page['name']}", href=page["path"])
         for page in dash.page_registry.values()
         ]),
-        dash.page_container  # здесь будет отображаться содержимое выбранной страницы
+        dash.page_container
     ])
 
     return html.Div([
@@ -156,13 +108,9 @@ def render_page(pathname):
         html.Div([
             html.H2("Специальные возможности администратора"),
             html.P("Доступ к расширенным настройкам"),
-            html.P("Просмотр всех пользователей"),
             html.P("Системные отчеты"),
         ]) if is_admin else None
     ])
 
 if __name__ == '__main__':
-    
-    # Запускаем приложение без режима отладки
     app.run(debug=False, port=8050)
-
