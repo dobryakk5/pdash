@@ -23,9 +23,49 @@ app = Dash(__name__, server=server)
 
 logger.info(f"Секретный ключ приложения: {server.secret_key[:5]}...")
 
+# Новый маршрут для обработки входа
+@server.route('/login')
+def handle_login():
+    logger.info("\n" + "="*50)
+    logger.info("Начало обработки /login запроса")
+    
+    token = request.args.get('token')
+    logger.info(f"Получен токен из URL: {token}")
+    
+    if not token:
+        logger.warning("Токен не предоставлен")
+        return "Токен не предоставлен", 400
+    
+    # Формируем ключ Redis
+    redis_key = f"dash_token:{token}"
+    logger.info(f"Ключ для поиска в Redis: '{redis_key}'")
+    
+    # Проверяем токен в Redis
+    user_id = r.get(redis_key)
+    logger.info(f"Результат поиска в Redis: '{user_id}'")
+    
+    if user_id:
+        logger.info(f"Найден user_id: {user_id}")
+        
+        # Удаляем использованный токен
+        r.delete(redis_key)
+        logger.info(f"Токен удален из Redis")
+        
+        # Сохраняем user_id в сессии
+        session['user_id'] = user_id
+        logger.info(f"User_id сохранен в сессии: {session['user_id']}")
+        
+        # Перенаправляем на основной интерфейс
+        return redirect('/app')
+    
+    logger.error("ОШИБКА: Токен не найден в Redis или истек срок действия")
+    return "Неверная или просроченная ссылка для входа", 401
+
 # Маршрут для favicon
 @server.route('/favicon.ico')
 def favicon():
+    # Логируем запрос, но игнорируем параметры
+    logger.info("Запрос favicon.ico")
     return send_from_directory(os.path.join(server.root_path, 'static'),
                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
