@@ -6,7 +6,7 @@ from flask import Flask, session
 import redis
 import dash
 from dash import Dash, dcc, html, Input, Output
-from auth import AuthManager
+from .auth import AuthManager
 
 # Добавляем корень проекта в PYTHONPATH
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -56,4 +56,4 @@ app.layout = html.Div([
 ])
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8050)
+    app.run(debug=True, port=8050, dev_tools_ui=False, dev_tools_props_check=False)

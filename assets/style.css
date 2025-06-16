@@ -1,0 +1,10 @@
+/* Убираем кнопку Toggle Columns */
+.show-hide {
+    display: none !important;
+  }
+  
+  /* (Опционально) Убираем пустое место над таблицей, которое она занимала */
+  .dash-spreadsheet-menu {
+    display: none !important;
+  }
+  

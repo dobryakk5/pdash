@@ -6,7 +6,7 @@ import dash
 from dash import html, dash_table, Input, Output, State
 from flask import session
 import pandas as pd
-from database import fetch_user_purchases
+from database import fetch_user_purchases, update_user_purchase
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ layout = html.Div([
         data=[],
         columns=[],
         editable=True,
+        hidden_columns=['id'], 
         page_size=20,
         filter_action="native",
         filter_options={'case': 'insensitive'},
@@ -37,10 +38,10 @@ layout = html.Div([
         style_cell={'textAlign': 'left', 'whiteSpace': 'normal'},
         style_cell_conditional=[
             {'if': {'column_id': 'price'}, 'textAlign': 'right'},
+            {'if': {'column_id': 'ts'}, 'textAlign': 'right'},
             {'if': {'column_type': 'datetime'}, 'textAlign': 'right'}
         ]
     ),
-    html.Button('Сохранить', id='save-btn', n_clicks=0),
     html.Div(id='save-info', style={'marginTop': '10px', 'color': 'green'})
 ])
 
@@ -85,16 +86,38 @@ def load_purchases(pathname):
         return info, data, columns
     except Exception as e:
         logger.exception("Error in load_purchases callback")
-        # Показываем пользователю текст ошибки
         return f"❌ Ошибка: {str(e)}", [], []
 
 @dash.callback(
     Output('save-info', 'children'),
-    Input('save-btn', 'n_clicks'),
-    State('purchases-table', 'data'),
+    Input('purchases-table', 'data'),
+    State('purchases-table', 'data_previous'),
+    State('purchases-table', 'columns'),
     prevent_initial_call=True
 )
-def save_changes(n_clicks, rows):
-    # TODO: сохранить изменения в БД при необходимости
-    logger.info(f"User saved {len(rows)} rows with {n_clicks} clicks")
-    return f"✅ Изменения сохранены ({n_clicks})"
+def autosave_changes(current_data, previous_data, columns):
+    if not previous_data:
+        return dash.no_update
+
+    user_id = session.get('user_id')
+    if not user_id:
+        return "❌ Не авторизован"
+
+    try:
+        updated_rows = 0
+        for new_row, old_row in zip(current_data, previous_data):
+            if new_row != old_row:
+                purchase_id = new_row.get("id")
+                if not purchase_id:
+                    continue
+                changes = {k: v for k, v in new_row.items() if old_row.get(k) != v and k != "id"}
+                if changes:
+                    update_user_purchase(user_id, purchase_id, changes)
+                    updated_rows += 1
+
+        if updated_rows:
+            return f"✅ Автосохранение: {updated_rows} строк"
+        return dash.no_update
+    except Exception as e:
+        logger.exception("Ошибка автосохранения")
+        return f"❌ Ошибка автосохранения: {str(e)}"
