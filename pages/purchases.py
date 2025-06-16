@@ -1,85 +1,65 @@
 # pages/purchases.py
-import dash
-from dash import html, dcc, dash_table
-import plotly.express as px
-import pandas as pd
-import asyncpg
-import os
-import asyncio
-from dotenv import load_dotenv
+import os, sys, logging, dash
+from dash import html, dash_table, Input, Output
 from flask import session
+import pandas as pd
+from database import fetch_user_purchases
 
-# Загружаем DATABASE_URL из .env
-load_dotenv()
+# Для логов
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Глобальная переменная для пула соединений
-_db_pool = None
+# Подключаем корневую директорию
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(current_dir)
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
 
-async def get_pool():
-    global _db_pool
-    if _db_pool is None:
-        dsn = os.getenv('DATABASE_URL')
-        _db_pool = await asyncpg.create_pool(dsn)
-    return _db_pool
+dash.register_page(__name__, path='/purchases', name='Покупки')
 
-dash.register_page(
-    __name__,
-    path='/purchases',  
-    name='Покупки',
-    title='История покупок'
+layout = html.Div([
+    html.H2("Ваши покупки"),
+    html.Div(id='table-info'),
+    dash_table.DataTable(
+        id='purchases-table',
+        data=[],
+        columns=[],
+        editable=True,
+        page_size=20,
+        filter_action="native",
+        sort_action="native",
+        style_table={'overflowX': 'auto'},
+        style_cell={'textAlign': 'left'}
+    )
+])
+
+@dash.callback(
+    Output('table-info', 'children'),
+    Output('purchases-table', 'data'),
+    Output('purchases-table', 'columns'),
+    Input('url', 'pathname'),
 )
+def load_purchases(pathname):
+    logger.info(f"Callback triggered for pathname={pathname!r}")
+    if not pathname or not pathname.endswith('/purchases'):
+        logger.info("Ignoring callback for other path.")
+        return dash.no_update, dash.no_update, dash.no_update
 
-def layout():
-    user_id_str = session.get('user_id')
-    if not user_id_str:
-        return html.Div("Пожалуйста, войдите в систему, чтобы просмотреть аналитику.")
-    
-    try:
-        # Преобразуем user_id в целое число
-        user_id = int(user_id_str)
-    except ValueError:
-        return html.Div("Некорректный идентификатор пользователя.")
-    
-    # Создаем асинхронную функцию для получения данных
-    async def fetch_data():
-        pool = await get_pool()
-        async with pool.acquire() as connection:
-            rows = await connection.fetch(
-                "SELECT id, category, subcategory, price, ts "
-                "FROM purchases "
-                "WHERE user_id = $1",
-                user_id  # Теперь передаем целое число
-            )
-            return [dict(row) for row in rows]
+    user_id = session.get('user_id')
+    if not user_id:
+        logger.warning("Пользователь не авторизован")
+        return "❌ Пользователь не авторизован", [], []
 
-    # Получаем данные синхронно через event loop
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        purchases_data = loop.run_until_complete(fetch_data())
-    except Exception as e:
-        return html.Div(f"Ошибка загрузки данных: {str(e)}")
+    purchases = fetch_user_purchases(user_id)
+    count = len(purchases)
+    logger.info(f"Fetched {count} rows from the database")
 
-    # Создаем таблицу с редактированием
-    return html.Div([
-        html.H1("Аналитика"),
-        dash_table.DataTable(
-            id='purchases-table',
-            columns=[
-                {"name": "ID", "id": "id", "editable": False},
-                {"name": "Категория", "id": "category", "editable": True},
-                {"name": "Подкатегория", "id": "subcategory", "editable": True},
-                {"name": "Цена", "id": "price", "editable": True, 'type': 'numeric'},
-                {"name": "Дата", "id": "ts", "editable": False}
-            ],
-            data=purchases_data,
-            editable=True,
-            style_table={'overflowX': 'auto'},
-            style_cell={
-                'height': 'auto',
-                'minWidth': '100px', 'width': '150px', 'maxWidth': '200px',
-                'whiteSpace': 'normal'
-            },
-            page_size=20
-        )
-    ])
+    if count == 0:
+        return "ℹ️ У вас пока нет покупок", [], []
+
+    df = pd.DataFrame(purchases)
+    data = df.to_dict('records')
+    columns = [{"name": col, "id": col, "editable": True} for col in df.columns]
+    info = f"Получено строк: {count}"
+
+    return info, data, columns
