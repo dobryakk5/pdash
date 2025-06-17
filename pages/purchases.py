@@ -1,127 +1,71 @@
-from dash import ctx, html, dash_table, Input, Output, State, no_update, register_page, callback
+from dash import State, html, Input, Output, callback, register_page, no_update
+from dash_ag_grid import AgGrid
 import pandas as pd
 from flask import session
 from pdash.database import fetch_user_purchases, update_user_purchase
 
-# Регистрируем страницу в Dash Pages
 register_page(__name__, path="/purchases", name="Purchases")
 
-# Layout страницы: таблица заполняется сразу
 layout = html.Div([
     html.H2("Мои покупки"),
     html.Div("Загрузка...", id='row-count', style={'marginBottom': '1rem'}),
-
-    dash_table.DataTable(
+    AgGrid(
         id='purchases-table',
-        data=[],
-        columns=[
-            {'name': 'ID',          'id': 'id',          'hidden': True, 'presentation': 'input'},
-            {'name': 'Категория',    'id': 'category',    'editable': True, 'presentation': 'input'},
-            {'name': 'Подкатегория', 'id': 'subcategory', 'editable': True, 'presentation': 'input'},
-            {'name': 'Цена',       'id': 'price',       'type': 'numeric', 'editable': True, 'presentation': 'input'},
-            {
-                'name': 'Дата',  
-                'id': 'ts',          
-                'type': 'datetime',  
-                'editable': True, 'presentation': 'input'
-            },
+        columnDefs=[
+            {'headerName': 'ID',          'field': 'id',          'hide': True},
+            {'headerName': 'Категория',   'field': 'category',    'editable': True},
+            {'headerName': 'Подкатегория','field': 'subcategory', 'editable': True},
+            {'headerName': 'Цена',        'field': 'price',       'editable': True, 'type': 'rightAligned'},
+            {'headerName': 'Дата',        'field': 'ts',          'editable': True},
         ],
-        editable=True,
-        hidden_columns=['id'],
-        page_size=20,
-        filter_action='native',
-        filter_options={'case': 'insensitive'},
-        sort_action='native',
-        fill_width=False,
-        style_table={'overflowX': 'auto'},
-        style_cell={'textAlign': 'left', 'whiteSpace': 'normal'},
-        style_cell_conditional=[
-            {'if': {'column_id': 'price'}, 'textAlign': 'right'},
-            {'if': {'column_id': 'ts'},    'textAlign': 'center'},
-        ]
+        rowData=[],
+        getRowId="params.data.id",
+        defaultColDef={'resizable': True, 'sortable': True, 'filter': True},
+        columnSize="sizeToFit",
+        style={'height': '600px', 'width': '100%'},
+        className="ag-theme-alpine"
     ),
-
     html.Div(id='save-feedback', style={'marginTop': '1rem', 'color': 'green'})
 ])
 
-# Callback: загрузка данных при рендере страницы
 @callback(
-    Output('purchases-table', 'data'),
+    Output('purchases-table', 'rowData'),
     Output('row-count', 'children'),
     Input('url', 'pathname')
 )
-def load_purchases(pathname):
+def load_data(pathname):
     if not pathname.endswith('/purchases'):
         return no_update, ''
-
     user_id = session.get('user_id')
+    print(f"User ID из сессии: {user_id}")
     if not user_id:
         return [], 'Получено записей: 0'
-
-    # Получаем «сырые» данные — возможно, это список
-    data_raw = fetch_user_purchases(user_id)
-
-    # Если это список, превращаем в DataFrame
-    df = pd.DataFrame(data_raw) if isinstance(data_raw, list) else data_raw
-
-    # Убеждаемся, что столбцы есть
+    data = fetch_user_purchases(user_id)
+    df = pd.DataFrame(data) if isinstance(data, list) else data
     df = df[['id', 'category', 'subcategory', 'price', 'ts']]
+    df['ts'] = pd.to_datetime(df['ts']).dt.strftime('%Y-%m-%d')
+    recs = df.to_dict('records')
+    return recs, f"Получено записей: {len(recs)}"
 
-    # Форматируем timestamp
-    df['ts'] = pd.to_datetime(df['ts']).dt.strftime('%Y-%m-%d')  # формат для date input
-
-    records = df.to_dict('records')
-    return records, f"Получено записей: {len(records)}"
-
-# Callback: автосохранение изменений всех полей
 @callback(
     Output('save-feedback', 'children', allow_duplicate=True),
-    Input('purchases-table', 'data_timestamp'),
-    State('purchases-table', 'data'),
-    State('purchases-table', 'data_previous'),
+    Output('purchases-table', 'rowTransaction'),
+    Input('purchases-table', 'cellValueChanged'),
     prevent_initial_call=True
 )
-def autosave_changes(timestamp, current, previous):
-    if previous is None:
-        return no_update
+def autosave_cell(changes):
+    user_id = session.get('user_id')
+    if not isinstance(changes, list) or len(changes) == 0:
+        return no_update, no_update
+    ch = changes[0]
+    old = ch.get('oldValue')
+    new = ch.get('value')
+    if new is None:
+        return no_update, no_update
+    field = ch.get('colId')
+    data = ch.get('data', {})
+    purchase_id = data.get('id')
+    update_user_purchase(user_id, purchase_id, {field: new})
 
-    for new_row, old_row in zip(current, previous):
-        if not new_row.get('id'):
-            continue
-        # Вычисляем изменения, включая ts
-        changes = {k: v for k, v in new_row.items()
-                   if old_row.get(k) != v and k not in ('id', 'user_id')}
-        if changes:
-            key, new_val = next(iter(changes.items()))
-            old_val = old_row.get(key)
-            # Обновляем в базе, приводя ts к нужному формату
-            update_user_purchase(session.get('user_id'), new_row['id'], {key: new_val})
-            return f"Изменено: '{old_val}' --> '{new_val}'"
-    return no_update
-
-from dash import ctx
-
-@callback(
-    Output('purchases-table', 'columns'),
-    Input('purchases-table', 'active_cell'),
-    State('purchases-table', 'columns'),
-    prevent_initial_call=True
-)
-def make_active_cell_editable(active_cell, columns):
-    if not active_cell:
-        return columns
-
-    col_id = active_cell.get("column_id")
-    if not col_id:
-        return columns
-
-    new_columns = []
-    for col in columns:
-        # только активной колонке ставим presentation=input
-        if col['id'] == col_id:
-            col = {**col, 'presentation': 'input'}
-        else:
-            col.pop('presentation', None)  # убираем у остальных
-        new_columns.append(col)
-
-    return new_columns
+    msg = f"Изменено: '{old}' → '{new}'"
+    return msg, {"update": [data]}

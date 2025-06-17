@@ -46,5 +46,9 @@ def update_user_purchase(user_id: int, purchase_id: int, updates: dict):
             query = f"UPDATE purchases SET {set_clause} WHERE user_id = %s AND id = %s"
             cur.execute(query, values)
         conn.commit()
+    except Exception as e:
+        print("Ошибка при сохранении:", repr(e))
+
+        
     finally:
         conn.close()
