@@ -5,11 +5,11 @@ import argparse
 from flask import Flask, session
 import redis
 import dash
-from dash import Dash, dcc, html, Input, Output
+from dash import Dash, html, dcc, page_container, page_registry
 from .auth import AuthManager
 
 # Добавляем корень проекта в PYTHONPATH
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+#sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Настройка аргументов командной строки
 parser = argparse.ArgumentParser()
@@ -26,7 +26,7 @@ logger.info("Подключение к Redis установлено")
 # Создаем Flask и Dash приложения
 server = Flask(__name__)
 BOT_TOKEN = os.getenv("API_TOKEN")
-server.secret_key = BOT_TOKEN or "DEFAULT_SECRET"
+server.secret_key = BOT_TOKEN
 
 # Инициализация менеджера авторизации
 auth_manager = AuthManager(r, admin_mode=args.admin)
@@ -35,10 +35,17 @@ auth_manager = AuthManager(r, admin_mode=args.admin)
 app = Dash(
     __name__,
     server=server,
-    url_base_pathname='/app/',
     use_pages=True,
-    suppress_callback_exceptions=True
+    suppress_callback_exceptions=True,
+    assets_folder="assets",
+    requests_pathname_prefix="/app/",  # <─ добавили
+    routes_pathname_prefix="/app/"     # <─ добавили
 )
+
+#app.validation_layout = dash.html.Div([
+#    serve_layout(),          # ваш основной layout с DatePicker
+#    purchases.layout,        # если у вас разделённый файл страницы
+#])
 
 # Макет приложения
 app.layout = html.Div([
@@ -47,11 +54,11 @@ app.layout = html.Div([
         # Навигация между страницами
         html.Div([
             dcc.Link(f"{page['name']} | ", href=page['relative_path'])
-            for page in dash.page_registry.values()
+            for page in page_registry.values()
         ], style={'padding': '10px', 'backgroundColor': '#f0f0f0'}),
 
         # Контейнер для содержимого страниц
-        dash.page_container
+        page_container
     ], id='page-content')
 ])
 
