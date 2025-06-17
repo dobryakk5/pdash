@@ -51,4 +51,4 @@ app.layout = html.Div([
 
 if __name__ == '__main__':
     logger.info("Запуск Dash на порту 8050")
-    app.run(debug=True, port=8050)
+    app.run(debug=True, port=8050, dev_tools_ui=False, dev_tools_props_check=False)

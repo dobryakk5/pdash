@@ -41,13 +41,16 @@ layout = html.Div([
         ],  # ← вот тут закрывается columnDefs
         columnSize="autoSize",               # или "responsiveSizeToFit"
         columnSizeOptions={"skipHeader": False},
-        dashGridOptions={'localeText': LOCALE_RU, 'suppressColumnVirtualisation': True},
+        dashGridOptions={'localeText': LOCALE_RU, 'suppressColumnVirtualisation': True,
+                         'pagination': True,             # включить пагинацию
+                         #'paginationAutoPageSize': True, # автоматически подстроить количество строк под высоту
+                         'paginationPageSize': 50,  
+                        },
         rowData=[],                          # заполняется в callback
         getRowId="params.data.id",
         defaultColDef={'resizable': True, 'sortable': True, 'filter': True},
-        style={'height': '600px', 'width': '700px'},
+        style={'height': '800px', 'width': '700px'},
         className="ag-theme-alpine",
-        dangerously_allow_code=True,
 
     ),
     html.Div(id='save-feedback', style={'marginTop': '1rem', 'color': 'green'})
@@ -70,7 +73,7 @@ def load_data(pathname):
     df = df[['id', 'category', 'subcategory', 'price', 'ts']]
     df['ts'] = pd.to_datetime(df['ts']).dt.strftime('%Y-%m-%d')
     recs = df.to_dict('records')
-    return recs, f"Получено записей: {len(recs)}"
+    return recs, f"Внесено покупок: {len(recs)}"
 
 
 @callback(
