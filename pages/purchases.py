@@ -3,13 +3,15 @@ from dash_ag_grid import AgGrid
 import pandas as pd
 from flask import session
 from pdash.database import fetch_user_purchases, update_user_purchase
+import dash_ag_grid as dag
+from pdash.russian_aggrid_locale import LOCALE_RU
 
 register_page(__name__, path="/purchases", name="Purchases")
 
 layout = html.Div([
     html.H2("Мои покупки"),
     html.Div("Загрузка...", id='row-count', style={'marginBottom': '1rem'}),
-    AgGrid(
+    dag.AgGrid(
         id='purchases-table',
         columnDefs=[
             {'headerName': 'ID',          'field': 'id',          'hide': True},
@@ -23,7 +25,8 @@ layout = html.Div([
         defaultColDef={'resizable': True, 'sortable': True, 'filter': True},
         columnSize="sizeToFit",
         style={'height': '600px', 'width': '100%'},
-        className="ag-theme-alpine"
+        className="ag-theme-alpine",
+        dashGridOptions={'localeText': LOCALE_RU},
     ),
     html.Div(id='save-feedback', style={'marginTop': '1rem', 'color': 'green'})
 ])
@@ -37,7 +40,6 @@ def load_data(pathname):
     if not pathname.endswith('/purchases'):
         return no_update, ''
     user_id = session.get('user_id')
-    print(f"User ID из сессии: {user_id}")
     if not user_id:
         return [], 'Получено записей: 0'
     data = fetch_user_purchases(user_id)
@@ -66,6 +68,5 @@ def autosave_cell(changes):
     data = ch.get('data', {})
     purchase_id = data.get('id')
     update_user_purchase(user_id, purchase_id, {field: new})
-
     msg = f"Изменено: '{old}' → '{new}'"
-    return msg, {"update": [data]}
+    return msg, {"update": [data]} 
