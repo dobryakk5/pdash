@@ -1,4 +1,4 @@
-from dash import html, dash_table, Input, Output, State, no_update, register_page, callback
+from dash import ctx, html, dash_table, Input, Output, State, no_update, register_page, callback
 import pandas as pd
 from flask import session
 from pdash.database import fetch_user_purchases, update_user_purchase
@@ -9,11 +9,23 @@ register_page(__name__, path="/purchases", name="Purchases")
 # Layout страницы: таблица заполняется сразу
 layout = html.Div([
     html.H2("Мои покупки"),
-    html.Div(id='row-count', style={'marginBottom': '1rem'}),
+    html.Div("Загрузка...", id='row-count', style={'marginBottom': '1rem'}),
+
     dash_table.DataTable(
         id='purchases-table',
         data=[],
-        columns=[],
+        columns=[
+            {'name': 'ID',          'id': 'id',          'hidden': True, 'presentation': 'input'},
+            {'name': 'Категория',    'id': 'category',    'editable': True, 'presentation': 'input'},
+            {'name': 'Подкатегория', 'id': 'subcategory', 'editable': True, 'presentation': 'input'},
+            {'name': 'Цена',       'id': 'price',       'type': 'numeric', 'editable': True, 'presentation': 'input'},
+            {
+                'name': 'Дата',  
+                'id': 'ts',          
+                'type': 'datetime',  
+                'editable': True, 'presentation': 'input'
+            },
+        ],
         editable=True,
         hidden_columns=['id'],
         page_size=20,
@@ -25,51 +37,41 @@ layout = html.Div([
         style_cell={'textAlign': 'left', 'whiteSpace': 'normal'},
         style_cell_conditional=[
             {'if': {'column_id': 'price'}, 'textAlign': 'right'},
-            {'if': {'column_id': 'ts'}, 'textAlign': 'right'},
+            {'if': {'column_id': 'ts'},    'textAlign': 'center'},
         ]
     ),
+
     html.Div(id='save-feedback', style={'marginTop': '1rem', 'color': 'green'})
 ])
 
 # Callback: загрузка данных при рендере страницы
 @callback(
     Output('purchases-table', 'data'),
-    Output('purchases-table', 'columns'),
     Output('row-count', 'children'),
     Input('url', 'pathname')
 )
 def load_purchases(pathname):
     if not pathname.endswith('/purchases'):
-        return no_update, no_update, ''
+        return no_update, ''
 
     user_id = session.get('user_id')
     if not user_id:
-        return [], [], 'Получено записей: 0'
+        return [], 'Получено записей: 0'
 
     # Получаем «сырые» данные — возможно, это список
     data_raw = fetch_user_purchases(user_id)
 
     # Если это список, превращаем в DataFrame
-    if isinstance(data_raw, list):
-        df = pd.DataFrame(data_raw)
-    else:
-        df = data_raw
+    df = pd.DataFrame(data_raw) if isinstance(data_raw, list) else data_raw
 
     # Убеждаемся, что столбцы есть
     df = df[['id', 'category', 'subcategory', 'price', 'ts']]
 
     # Форматируем timestamp
-    df['ts'] = pd.to_datetime(df['ts']).dt.strftime('%d.%m.%Y')
+    df['ts'] = pd.to_datetime(df['ts']).dt.strftime('%Y-%m-%d')  # формат для date input
 
     records = df.to_dict('records')
-    columns = [
-        {'name': 'ID',          'id': 'id',          'hidden': True},
-        {'name': 'Категория',    'id': 'category',    'editable': True},
-        {'name': 'Подкатегория', 'id': 'subcategory', 'editable': True},
-        {'name': 'Цена',       'id': 'price',       'type': 'numeric', 'editable': True},
-        {'name': 'Дата',   'id': 'ts',          'type': 'datetime','editable': False},
-    ]
-    return records, columns, f"Получено записей: {len(records)}"
+    return records, f"Получено записей: {len(records)}"
 
 # Callback: автосохранение изменений всех полей
 @callback(
@@ -86,11 +88,40 @@ def autosave_changes(timestamp, current, previous):
     for new_row, old_row in zip(current, previous):
         if not new_row.get('id'):
             continue
+        # Вычисляем изменения, включая ts
         changes = {k: v for k, v in new_row.items()
-                   if old_row.get(k) != v and k not in ('id', 'user_id', 'ts')}
+                   if old_row.get(k) != v and k not in ('id', 'user_id')}
         if changes:
             key, new_val = next(iter(changes.items()))
             old_val = old_row.get(key)
+            # Обновляем в базе, приводя ts к нужному формату
             update_user_purchase(session.get('user_id'), new_row['id'], {key: new_val})
             return f"Изменено: '{old_val}' --> '{new_val}'"
     return no_update
+
+from dash import ctx
+
+@callback(
+    Output('purchases-table', 'columns'),
+    Input('purchases-table', 'active_cell'),
+    State('purchases-table', 'columns'),
+    prevent_initial_call=True
+)
+def make_active_cell_editable(active_cell, columns):
+    if not active_cell:
+        return columns
+
+    col_id = active_cell.get("column_id")
+    if not col_id:
+        return columns
+
+    new_columns = []
+    for col in columns:
+        # только активной колонке ставим presentation=input
+        if col['id'] == col_id:
+            col = {**col, 'presentation': 'input'}
+        else:
+            col.pop('presentation', None)  # убираем у остальных
+        new_columns.append(col)
+
+    return new_columns
