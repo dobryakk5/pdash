@@ -69,13 +69,9 @@ app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     html.Div([
         html.Div([
-            dcc.Link(f"{page['name']} | ", href=page['relative_path'])
-            for page in page_registry.values()
-        ], style={'padding': '10px', 'backgroundColor': '#f0f0f0'}),
-
         page_container
     ], id='page-content')
-])
+])])
 
 if __name__ == '__main__':
     logger.info("Запуск веб-сервера на порту 8050")
