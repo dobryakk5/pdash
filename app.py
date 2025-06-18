@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 server = Flask(__name__)
-server.secret_key = os.getenv("API_TOKEN")
+server.secret_key = os.getenv("API_TOKEN") or "FALLBACK_SECRET"
+if server.secret_key == "FALLBACK_SECRET":
+    logger.warning("Используется запасной секрет — не для продакшна!")
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
@@ -29,11 +31,11 @@ auth_manager = AuthManager(r, admin_mode=False) #args.admin)
 server.add_url_rule('/auth', 'auth', auth_manager.handle_authentication)
 
 # 2) Защита всех URL, начинающихся с /app
-@server.before_request
-def protect_dash():
-    if request.path.startswith('/app'):
-        if auth_manager.get_current_user() is None:
-            return redirect('/auth')
+@server.route('/app/')
+def dash_index():
+    if auth_manager.get_current_user() is None:
+        return redirect('/auth')
+    return app.index()
 
 # 3) Инициализация Dash
 app = Dash(
@@ -52,6 +54,7 @@ app.layout = html.Div([
     page_container
 ])
 
+# Точка входа только для локального запуска
 if __name__ == '__main__':
     logger.info("Запуск Dash на порту 8050")
-    app.run(debug=False, port=8050, dev_tools_ui=False, dev_tools_props_check=False)
+    app.run(debug=False, port=8050)
