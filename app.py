@@ -1,7 +1,9 @@
+from gevent import monkey
+monkey.patch_all()
+
 import os
 import logging
 import argparse
-
 from flask import Flask, session, redirect, request
 import redis
 from dash import Dash, html, dcc, page_container
@@ -11,16 +13,17 @@ from pdash.auth import AuthManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 server = Flask(__name__)
 server.secret_key = os.getenv("API_TOKEN")
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--admin', action='store_true')
-args = parser.parse_args()
+r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
-auth_manager = AuthManager(r, admin_mode=args.admin)
+#parser = argparse.ArgumentParser() 
+#parser.add_argument('--admin', action='store_true')
+#args = parser.parse_args()
+
+auth_manager = AuthManager(r, admin_mode=False) #args.admin)
 
 # 1) Роут для авторизации
 server.add_url_rule('/auth', 'auth', auth_manager.handle_authentication)
@@ -37,7 +40,6 @@ app = Dash(
     __name__,
     server=server,
     use_pages=True,
-    serve_locally=False,
     suppress_callback_exceptions=True,
     assets_folder="assets",
     requests_pathname_prefix="/app/",
