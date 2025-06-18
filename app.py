@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 server = Flask(__name__)
-server.secret_key = os.getenv("API_TOKEN") or "DEFAULT_SECRET"
+server.secret_key = os.getenv("API_TOKEN")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--admin', action='store_true')
@@ -37,6 +37,7 @@ app = Dash(
     __name__,
     server=server,
     use_pages=True,
+    serve_locally=False,
     suppress_callback_exceptions=True,
     assets_folder="assets",
     requests_pathname_prefix="/app/",
@@ -51,4 +52,4 @@ app.layout = html.Div([
 
 if __name__ == '__main__':
     logger.info("Запуск Dash на порту 8050")
-    app.run(debug=True, port=8050, dev_tools_ui=False, dev_tools_props_check=False)
+    app.run(debug=False, port=8050, dev_tools_ui=False, dev_tools_props_check=False)
