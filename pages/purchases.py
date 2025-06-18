@@ -23,7 +23,7 @@ layout = html.Div([
               'field': 'ts',
               'editable': True,
               'type': 'rightAligned',
-              'minWidth': 120,
+              'minWidth': 110,
               'valueFormatter': {
                   "function": (
                     "(() => {"
@@ -48,7 +48,7 @@ layout = html.Div([
         rowData=[],
         getRowId="params.data.id",
         defaultColDef={'resizable': True, 'sortable': True, 'filter': True},
-        style={'height': '760px', 'width': '650px'},
+        style={'height': '760px', 'width': '100%', 'maxWidth': '700px'},
         className="ag-theme-alpine",
     ),
 ])
