@@ -1,5 +1,5 @@
-from gevent import monkey
-monkey.patch_all()
+#from gevent import monkey
+#monkey.patch_all()
 
 import os
 import logging
@@ -21,21 +21,21 @@ if server.secret_key == "FALLBACK_SECRET":
 
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
-#parser = argparse.ArgumentParser() 
-#parser.add_argument('--admin', action='store_true')
-#args = parser.parse_args()
+parser = argparse.ArgumentParser() 
+parser.add_argument('--admin', action='store_true')
+args = parser.parse_args()
 
-auth_manager = AuthManager(r, admin_mode=False) #args.admin)
+auth_manager = AuthManager(r, admin_mode=args.admin)
 
 # 1) Роут для авторизации
 server.add_url_rule('/auth', 'auth', auth_manager.handle_authentication)
 
 # 2) Защита всех URL, начинающихся с /app
-@server.route('/app/')
-def dash_index():
-    if auth_manager.get_current_user() is None:
-        return redirect('/auth')
-    return app.index()
+#@server.route('/app/')
+#def dash_index():
+#    if auth_manager.get_current_user() is None:
+ #       return redirect('/auth')
+ #   return app.index()
 
 # 3) Инициализация Dash
 app = Dash(

@@ -1,0 +1,42 @@
+from dash import html, dcc, Input, Output, callback, register_page
+import plotly.express as px
+import pandas as pd
+
+# Регистрируем страницу
+register_page(__name__, path="/gysto", name="gysto")
+
+# Заглушка-данные
+dummy_data = pd.DataFrame({
+    "category": ["Продукты", "Продукты", "Одежда", "Одежда", "Техника"],
+    "subcategory": ["Фрукты", "Овощи", "Мужская", "Женская", "Смартфоны"]
+})
+
+# Layout страницы
+layout = html.Div([
+    dcc.Location(id='url', refresh=False),  # ⬅️ ДОБАВЬ ЭТО
+    html.H2("Гистограмма по категориям и подкатегориям"),
+    html.Div(id='gmessage', style={'marginBottom': '1rem'}),
+    dcc.Loading(
+        dcc.Graph(id='histogram', style={'width': '100%', 'maxWidth': '700px', 'height': '600px'})
+    )
+])
+
+
+# Callback — срабатывает при открытии страницы
+@callback(
+    Output('histogram', 'figure'),
+    Output('gmessage', 'children'),
+    Input('histogram', 'id'),
+    allow_duplicate=True
+)
+def update_histogram(_):
+    grouped = dummy_data.groupby(['category', 'subcategory']).size().reset_index(name='count')
+    fig = px.bar(
+        grouped,
+        x='category',
+        y='count',
+        color='subcategory',
+        barmode='stack',
+        title='Распределение покупок'
+    )
+    return fig, f'Всего записей: {len(dummy_data)}'
