@@ -7,8 +7,7 @@ from pdash.database import fetch_user_purchases
 register_page(__name__, path="/gysto", name="gysto")
 
 layout = html.Div([
-    dcc.Location(id='url', refresh=False),
-    html.H2("График покупок по категориям"),
+    #dcc.Location(id='url', refresh=False),
     html.Div(id='gmessage', style={'marginBottom': '1rem'}),
 
     # Панель фильтров: категория, подкатегория, период
@@ -142,7 +141,7 @@ def update_graph(selected_cat, selected_subcat, period):
         # По подкатегориям выбранной категории
         dff = df[df['category'] == selected_cat]
         grouped = dff.groupby(['period','subcategory'], as_index=False).agg(cost=('price','sum'))
-        title = f"Расходы в категории «{selected_cat}»"
+        title = f"Покупки в категории «{selected_cat}»"
         color = 'subcategory'
 
     else:

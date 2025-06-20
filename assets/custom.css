@@ -1,0 +1,32 @@
+/* assets/custom.css */
+
+/* Жирный шрифт и тень для активной NavLink */
+.nav-link.active {
+    font-weight: bold !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+  
+  /* Опционально: отступы между ссылками */
+.navbar-nav .nav-link {
+    margin: 0 0.5rem;
+  }
+
+a.nav-link {
+    color: black !important;
+}
+
+a.nav-link.active {
+    color: black !important;
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+.ag-theme-alpine .ag-set-filter-list-item {
+    white-space: normal;  /* разрешает перенос текста в фильтре */
+  }
+
+.ag-theme-alpine .ag-cell {
+    user-select: text;
+  }
+
+  

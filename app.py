@@ -8,6 +8,8 @@ from flask import Flask, session, redirect, request
 import redis
 from dash import Dash, html, dcc, page_container
 from pdash.auth import AuthManager
+import dash_bootstrap_components as dbc
+
 
 # ——————————————— Настройка ———————————————
 logging.basicConfig(level=logging.INFO)
@@ -37,24 +39,37 @@ server.add_url_rule('/auth', 'auth', auth_manager.handle_authentication)
  #       return redirect('/auth')
  #   return app.index()
 
-# 3) Инициализация Dash
 app = Dash(
     __name__,
     server=server,
     use_pages=True,
     suppress_callback_exceptions=True,
+    external_stylesheets=[dbc.themes.BOOTSTRAP], 
     assets_folder="assets",
     requests_pathname_prefix="/app/",
     routes_pathname_prefix="/app/"
 )
 
-# 4) layout с page_container
+nav = dbc.Nav(
+    [
+        dbc.NavLink("Покупки",     href="/app/purchases", active="exact"),
+        dbc.NavLink("Графики", href="/app/gysto",     active="exact"),
+    ]
+)
+
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
+    html.Div(
+        nav,
+        style={
+            "padding": "0.5rem 1rem",
+            #"backgroundColor": "#e9e9e8",  
+            #"borderBottom": "1px solid #dee2e6"
+        }
+    ),
     page_container
 ])
 
-# Точка входа только для локального запуска
 if __name__ == '__main__':
     logger.info("Запуск Dash на порту 8050")
     app.run(debug=False, port=8050)

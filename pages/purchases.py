@@ -8,33 +8,34 @@ from pdash.russian_aggrid_locale import LOCALE_RU
 register_page(__name__, path="/purchases", name="Purchases")
 
 layout = html.Div([
-    html.H2("Мои покупки"),
-    # Объединяем оба сообщения в один див:
     html.Div(id='message', style={'marginBottom': '1rem', 'color': 'green'}),
     dag.AgGrid(
         id='purchases-table',
+        dangerously_allow_code=True,
         columnDefs=[
             {'headerName': 'ID',           'field': 'id',          'hide': True},
             {'headerName': 'Категория',    'field': 'category',    'editable': True, 'flex': 1, 'minWidth': 100},
-            {'headerName': 'Подкатегория', 'field': 'subcategory', 'editable': True, 'flex': 1, 'minWidth': 250},
+            {
+                'headerName': 'Подкатегория',
+                'field': 'subcategory',
+                'editable': True,
+                'flex': 1,
+                'minWidth': 250
+            },
             {'headerName': 'Цена',         'field': 'price',       'editable': True, 'type': 'rightAligned', 'width': 80},
             {
-              'headerName': 'Дата',
-              'field': 'ts',
-              'editable': True,
-              'type': 'rightAligned',
-              'minWidth': 110,
-              'valueFormatter': {
-                  "function": (
-                    "(() => {"
-                    "  if (!params.value) return '';"
-                    "  const date = (params.value instanceof Date) ? params.value : new Date(params.value);"
-                    "  return d3.timeFormat('%d.%m.%y')(date);"
-                    "})()"
-                  )
-              },
-              'filter': 'agDateColumnFilter',
-              'filterParams': {'browserDatePicker': True}
+                'headerName': 'Дата',
+                'field': 'ts',
+                'editable': True,
+                'type': 'rightAligned',
+                'minWidth': 110,
+                'filter': 'agDateColumnFilter',
+                'filterParams': {'browserDatePicker': True},
+                'valueFormatter': {
+                    'function': "params.value ? d3.timeFormat('%d.%m.%y')(d3.timeParse('%Y-%m-%d')(params.value)) : ''"
+                    #'function': "(() => { if(!params.value) return ''; const d=new Date(params.value); const dd=d.getDate().toString().padStart(2,'0'); const mm=(d.getMonth()+1).toString().padStart(2,'0'); const yy=d.getFullYear().toString().slice(-2); return `${dd}.${mm}.${yy}`; })()"
+                    #'function': "d3.timeFormat('%d.%m.%y')(new Date(params.value))"
+                }
             }
         ],
         columnSize="autoSize",
@@ -49,7 +50,7 @@ layout = html.Div([
         getRowId="params.data.id",
         defaultColDef={'resizable': True, 'sortable': True, 'filter': True},
         style={'height': '760px', 'width': '100%', 'maxWidth': '700px'},
-        className="ag-theme-alpine",
+        className="ag-theme-alpine"
     ),
 ])
 
