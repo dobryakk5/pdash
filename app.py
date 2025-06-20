@@ -13,7 +13,7 @@ import dash_bootstrap_components as dbc
 
 # ——————————————— Настройка ———————————————
 # Папка для логов
-LOG_DIR = os.getenv('LOG_DIR', 'pdashlog')
+LOG_DIR = os.getenv('LOG_DIR', 'log')
 if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
@@ -66,7 +66,7 @@ def auth_route():
     user = auth_manager.get_current_user()
     if user:
         # Предполагается, что user содержит ключ 'id' или 'user_id'
-        user_id = user.get('id') or user.get('user_id') or user
+        user_id = session.get('user_id')
         logger.info(f"User authenticated: user_id={user_id}")
     else:
         logger.warning("Authentication attempt without valid user")
